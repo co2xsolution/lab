@@ -6,5 +6,5 @@
  * It ends in /exec — not /dev, which only works for you.
  */
 window.LABCHEM_CONFIG = {
-  apiUrl: 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE'
+  apiUrl: 'https://script.google.com/macros/s/AKfycbwZtMKmQz_2nD8QBmuGCRiyJW0pZ8nhgD5JUA8DxFTxkIKztXCcnTuZtmbtO3fDD3UvnQ/exec'
 };
