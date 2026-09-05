@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10202b">
+  <title>LabChem — Laboratory Inventory &amp; Chemical Management</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230e7c86' stroke-width='2'><path d='M9 2h6M10 2v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 8.5V2'/></svg>">
+</head>
+<body>
+  <div id="shell" class="anon">
+    <aside id="rail">
+      <div class="brand">
+        <div class="mark">
+          <svg class="flask" viewBox="0 0 24 24" fill="none" stroke="#7ddfd0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 2h6M10 2v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 8.5V2"/>
+            <path d="M7.2 14.5h9.6"/>
+          </svg>
+          <b>LabChem</b>
+        </div>
+        <small id="orgName">Laboratory</small>
+      </div>
+      <nav id="nav"></nav>
+      <div class="railfoot">
+        <b id="userName">—</b>
+        <span id="userRole"></span>
+        <span id="userEmail" class="email"></span>
+        <div class="acct">
+          <a href="#" onclick="openPasswordChange(false);return false">Change password</a>
+          <a href="#" onclick="signOut();return false">Sign out</a>
+        </div>
+      </div>
+    </aside>
+
+    <div id="main">
+      <header class="top">
+        <div>
+          <h1 id="viewTitle">Dashboard</h1>
+          <div class="sub" id="viewSub"></div>
+        </div>
+        <div class="spacer"></div>
+        <div id="topActions" class="row-actions"></div>
+      </header>
+      <div id="content"><div class="loading">Connecting…</div></div>
+    </div>
+  </div>
+
+  <div id="auth" style="display:none"></div>
+  <div id="layer"></div>
+  <div id="toasts"></div>
+
+  <script src="config.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
