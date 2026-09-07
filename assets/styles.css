@@ -207,3 +207,10 @@ dl.kv dd{margin:0}
   display:flex;align-items:center;justify-content:center}
 .scanbox video{width:100%;height:auto;display:block}
 .scanhint{color:#8fa6ad;font-size:13px;padding:26px;text-align:center}
+
+/* ---------- import preview ---------- */
+label.check{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink);margin-bottom:4px}
+label.check input{width:auto;margin:0}
+.modal .kpis{border-radius:4px}
+.modal .kpi{padding:10px 12px}
+.modal .kpi .n{font-size:21px}
