@@ -428,6 +428,7 @@ function viewInventory() {
   Promise.all([loadChemicals(), loadLocations()]).then(function () {
     setActions(
       (can('inventory.edit') ? '<button class="btn primary" onclick="openChemicalForm()">Add chemical</button>' : '') +
+      (can('inventory.edit') ? '<button class="btn" onclick="openImport()">Import sheet</button>' : '') +
       '<button class="btn" onclick="openScan()">Scan QR</button>' +
       (can('export') ? '<button class="btn" onclick="download(\'inventory\')">Export CSV</button>' : ''));
     renderInventory();
@@ -1122,6 +1123,137 @@ function goScan() {
 }
 
 /* =================================================================
+ * BULK IMPORT
+ * ================================================================= */
+
+let IMPORT_PREVIEW = null;
+
+function openImport() {
+  IMPORT_PREVIEW = null;
+  showModal('Import chemicals from a sheet',
+    '<p class="sub">Upload a CSV, TSV or Excel file. The first row must be a header row. ' +
+    'Column names are matched loosely, so <span class="mono">Expiry</span>, ' +
+    '<span class="mono">Expiry date</span> and <span class="mono">Expiration</span> all work. ' +
+    'Only <b>Name</b> and <b>Unit</b> are required; anything else is optional.</p>' +
+
+    '<div class="field"><label for="im_file">File</label>' +
+    '<input id="im_file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv"></div>' +
+
+    '<div class="field"><label for="im_mode">Rows that match a chemical already on file</label>' +
+    '<select id="im_mode">' +
+    '<option value="update">Update the existing record</option>' +
+    '<option value="createOnly">Leave it alone and skip the row</option>' +
+    '</select></div>' +
+
+    '<label class="check"><input type="checkbox" id="im_stock"> ' +
+    'Also overwrite stock quantities on updated rows</label>' +
+    '<p class="hint">Off by default. Quantities on the shelf are set by issues and receipts; ' +
+    'ticking this treats the file as a stocktake and logs the difference against each chemical.</p>' +
+
+    '<p class="hint" style="margin-top:14px"><a href="#" onclick="downloadTemplate();return false">' +
+    'Download a template</a> with the expected columns and two example rows.</p>',
+
+    '<button class="btn" onclick="closeLayer()">Cancel</button>' +
+    '<button class="btn primary" id="imNext" onclick="runPreview(this)">Check the file</button>');
+}
+
+function downloadTemplate() {
+  api('getImportTemplate').then(saveCsv).catch(fail);
+}
+
+function runPreview(btn) {
+  const input = document.getElementById('im_file');
+  if (!input.files.length) return fail(new Error('Choose a file first.'));
+  const file = input.files[0];
+  const createOnly = val('im_mode') === 'createOnly';
+  const updateStock = document.getElementById('im_stock').checked;
+
+  setBusy(btn, true, 'Reading…');
+  const reader = new FileReader();
+  reader.onload = function () {
+    api('previewImport', {
+      filename: file.name,
+      mimeType: file.type || '',
+      base64: reader.result.split(',')[1]
+    }).then(function (preview) {
+      preview.filename = file.name;
+      preview.createOnly = createOnly;
+      preview.updateStock = updateStock;
+      IMPORT_PREVIEW = preview;
+      renderImportPreview(preview);
+    }).catch(function (e) { setBusy(btn, false); fail(e); });
+  };
+  reader.onerror = function () { setBusy(btn, false); fail(new Error('That file could not be read.')); };
+  reader.readAsDataURL(file);
+}
+
+function renderImportPreview(p) {
+  const s = p.summary;
+  const willWrite = s.create + (p.createOnly ? 0 : s.update);
+
+  const badge = {
+    CREATE: '<span class="tag ok">Add</span>',
+    UPDATE: '<span class="tag info">Update</span>',
+    ERROR: '<span class="tag bad">Skip</span>'
+  };
+
+  const rows = p.rows.map(function (r) {
+    const stripe = r.action === 'ERROR' ? 'CRITICAL' : (r.action === 'UPDATE' ? 'WATCH' : 'OK');
+    const skippedByMode = p.createOnly && r.action === 'UPDATE';
+    return '<tr class="stripe ' + stripe + '">' +
+      '<td class="num sub">' + r.line + '</td>' +
+      '<td>' + (skippedByMode ? '<span class="tag mute">Skip</span>' : badge[r.action]) +
+      (r.matchedOn ? '<div class="sub">matched on ' + esc(r.matchedOn) + '</div>' : '') + '</td>' +
+      '<td><span class="name">' + esc(r.data.name || '—') + '</span>' +
+      '<div class="sub">' + esc([r.data.cas, r.data.lotNo].filter(String).join(' · ') || '&nbsp;') + '</div></td>' +
+      '<td class="num">' + fmtQty(r.data.qty) + ' ' + esc(r.data.unit || '') + '</td>' +
+      '<td class="mono sub">' + (r.data.expiryDate || '—') + '</td>' +
+      '<td class="sub">' + (r.errors.length
+        ? '<span style="color:var(--bad)">' + esc(r.errors.join('; ')) + '</span>'
+        : esc(r.data.location || '—')) + '</td></tr>';
+  }).join('');
+
+  const notes = [];
+  if (p.ignored.length) notes.push('Columns ignored: ' + esc(p.ignored.join(', ')) + '.');
+  if (p.updateStock) notes.push('Stock quantities <b>will</b> be overwritten on updated rows and logged as a stocktake.');
+  else if (s.update) notes.push('Stock quantities on updated rows will be left as they are.');
+
+  showModal('Check before importing — ' + esc(p.filename),
+    '<div class="kpis" style="margin-bottom:14px">' +
+    kpi(s.total, 'Rows read', '') +
+    kpi(s.create, 'To add', s.create ? 'ok' : '') +
+    kpi(p.createOnly ? 0 : s.update, 'To update', (!p.createOnly && s.update) ? 'warn' : '') +
+    kpi(s.error + (p.createOnly ? s.update : 0), 'To skip', s.error ? 'bad' : '') +
+    '</div>' +
+    (notes.length ? '<p class="hint">' + notes.join(' ') + '</p>' : '') +
+    '<div class="scroll" style="max-height:44vh"><table class="data"><thead><tr>' +
+    '<th>Row</th><th>Action</th><th>Chemical</th><th class="num">Quantity</th>' +
+    '<th>Expiry</th><th>Location or problem</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (s.error ? '<p class="hint">Rows marked Skip are left untouched. Fix them in the file and ' +
+      'import it again — chemicals already added will be matched and updated, not duplicated.</p>' : ''),
+
+    '<button class="btn" onclick="openImport()">Back</button>' +
+    '<button class="btn primary" id="imGo" onclick="runCommit(this)"' + (willWrite ? '' : ' disabled') + '>' +
+    (willWrite ? 'Import ' + willWrite + ' row' + (willWrite === 1 ? '' : 's') : 'Nothing to import') +
+    '</button>');
+}
+
+function runCommit(btn) {
+  if (!IMPORT_PREVIEW) return fail(new Error('Upload the file again.'));
+  setBusy(btn, true, 'Importing…');
+  api('commitImport', IMPORT_PREVIEW.rows, {
+    createOnly: IMPORT_PREVIEW.createOnly,
+    updateStock: IMPORT_PREVIEW.updateStock,
+    filename: IMPORT_PREVIEW.filename
+  }).then(function (msg) {
+    IMPORT_PREVIEW = null;
+    closeLayer();
+    toast(msg);
+    return loadChemicals(true).then(function () { go('inventory'); });
+  }).catch(function (e) { setBusy(btn, false); fail(e); });
+}
+
+/* =================================================================
  * PEOPLE
  * ================================================================= */
 
@@ -1365,17 +1497,19 @@ function saveLocation(id, btn) {
  * EXPORT
  * ================================================================= */
 
+function saveCsv(res) {
+  const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = res.filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
 function download(what) {
   toast('Preparing the file…');
-  api('exportCsv', what).then(function (res) {
-    const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = res.filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-  }).catch(fail);
+  api('exportCsv', what).then(saveCsv).catch(fail);
 }
 
 /* =================================================================
